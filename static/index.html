@@ -394,6 +394,15 @@ body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--t);max-
           <label class="flabel">Код з Telegram</label>
           <input class="fi" id="tg-auth-code" placeholder="12345" type="number" maxlength="5">
         </div>
+        <div id="tg-2fa-block" style="display:none;margin-bottom:8px">
+          <div class="fg s2">
+            <label class="flabel">🔐 Хмарний пароль (2FA)</label>
+            <input class="fi" id="tg-auth-password" placeholder="Твій хмарний пароль" type="password">
+          </div>
+          <div style="font-size:11px;color:var(--a);margin-top:6px;line-height:1.5;">
+            ⚠️ У тебе увімкнена двофакторна автентифікація. Введи хмарний пароль від Telegram.
+          </div>
+        </div>
         <button class="btn-big g" style="margin-top:0" onclick="tgConfirm()">✅ Підтвердити</button>
       </div>
     </div>
@@ -1411,20 +1420,27 @@ async function tgSendCode() {
 }
 
 async function tgConfirm() {
-  const phone = document.getElementById('tg-auth-phone').value.trim();
-  const code  = document.getElementById('tg-auth-code').value.trim();
+  const phone    = document.getElementById('tg-auth-phone').value.trim();
+  const code     = document.getElementById('tg-auth-code').value.trim();
+  const passEl   = document.getElementById('tg-auth-password');
+  const password = passEl ? passEl.value.trim() : '';
   if (!code) { alert('Введи код з Telegram'); return; }
   const btn = event.target;
   btn.textContent = '⏳ Перевіряємо...'; btn.disabled = true;
-  const r = await api('POST','/api/tg/confirm',{phone, code});
+  const r = await api('POST','/api/tg/confirm',{phone, code, password});
   btn.disabled = false;
-  if (r.ok) {
+  if (r && r.ok) {
     S.tg_connected = true;
     updateTgStatus();
     btn.textContent = '✅ Підключено!';
     setTimeout(() => syncState(), 1000);
+  } else if (r && r.error === '2FA_REQUIRED') {
+    document.getElementById('tg-2fa-block').style.display = 'block';
+    document.getElementById('tg-auth-password').focus();
+    btn.textContent = '✅ Підтвердити';
+    alert('Введи хмарний пароль (2FA) і натисни Підтвердити ще раз');
   } else {
-    alert('Невірний код: ' + (r.error || ''));
+    alert('Помилка: ' + (r ? r.error : 'невідома'));
     btn.textContent = '✅ Підтвердити';
   }
 }
