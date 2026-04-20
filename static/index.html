@@ -711,18 +711,8 @@ document.addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════
-// STATE
+// STATE & API
 // ═══════════════════════════════════════
-let S = {
-  orders: JSON.parse(localStorage.getItem('cs_orders') || '[]'),
-  ads: JSON.parse(localStorage.getItem('cs_ads') || '[]'),
-  chats1: JSON.parse(localStorage.getItem('cs_chats1') || '[]'),
-  chats2: JSON.parse(localStorage.getItem('cs_chats2') || '[]'),
-  log: JSON.parse(localStorage.getItem('cs_log') || '[]'),
-  running: false,
-  mode: 'auto',
-  editOrderId: null,
-  editAdId: null,
 // ═══════════════════════════════════════
 // API
 // ═══════════════════════════════════════
@@ -733,8 +723,18 @@ const API = window.location.hostname === '127.0.0.1' || window.location.hostname
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(API + path, opts);
-  return r.json();
+  try {
+    const r = await fetch(API + path, opts);
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      console.warn(`API ${path} повернув не JSON (${ct})`);
+      return null;
+    }
+    return await r.json();
+  } catch(e) {
+    console.warn(`API ${path} помилка:`, e);
+    return null;
+  }
 }
 
 // ═══════════════════════════════════════
@@ -743,6 +743,7 @@ async function api(method, path, body) {
 let S = {
   orders: [], ads: [], chats1: [], chats2: [], log: [],
   running: false, mode: 'auto',
+  editOrderId: null, editAdId: null,
   settings: { name: 'Максим', phone: '+380633885088', start: '08:00', end: '19:00' },
   stats: { sent_today: 0, t1_today: 0, t2_today: 0 },
   tg_connected: false,
@@ -780,11 +781,12 @@ async function loadAll() {
     S.chats1 = Array.isArray(c1)     ? c1     : [];
     S.chats2 = Array.isArray(c2)     ? c2     : [];
     S.log    = Array.isArray(log)    ? log    : [];
-    S.running = state.running || false;
-    S.mode    = state.mode    || 'auto';
-    S.stats   = state.stats   || {sent_today:0,t1_today:0,t2_today:0};
-    S.settings = state.settings || {name:'Максим',phone:'+380633885088',start:'08:00',end:'19:00'};
-    S.tg_connected = state.tg_connected || false;
+    const st = state || {};
+    S.running = st.running || false;
+    S.mode    = st.mode    || 'auto';
+    S.stats   = st.stats   || {sent_today:0,t1_today:0,t2_today:0};
+    S.settings = st.settings || {name:'Максим',phone:'+380633885088',start:'08:00',end:'19:00'};
+    S.tg_connected = st.tg_connected || false;
     renderOrders(); renderAds(); renderChats(1); renderChats(2);
     renderLog('all'); updateDispatchPage(); updateRunPill(); updateTgStatus();
   } catch(e) {
@@ -1260,10 +1262,6 @@ function updateRunPill() {
 }
 
 // Фронтенд більше не рахує — сервер сам відправляє
-function checkAutoSchedule() {}
-function startLoop() {}
-function stopLoop() {}
-function addLog() {}
 
 function checkAutoSchedule() {
   if (S.mode !== 'auto') return;
@@ -1275,7 +1273,7 @@ function checkAutoSchedule() {
     startLoop();
   } else if (!should && S.running) {
     S.running = false; updateRunPill();
-    addLog('sys', '⚙️ Система', `Авто-зупинка (19:00). Відправлено сьогодні: ${S.sentToday}`, null);
+    addLog('sys', '⚙️ Система', `Авто-зупинка (19:00). Відправлено сьогодні: ${S.stats.sent_today}`, null);
     stopLoop();
   }
 }
@@ -1298,7 +1296,7 @@ function dispatchTick() {
     if (ready1.length) {
       const chat = ready1[0];
       chat.lastSent = Date.now();
-      S.sentToday++; S.t1Today++;
+      S.stats.sent_today++; S.stats.t1_today++;
       const orderNames = S.orders.filter(o=>o.active&&o.status==='active').map((o,i)=>`#${i+1} ${o.cargo||''}`);
       addLog('t1', chat.name, '✅ Відправлено', orderNames);
       save(); renderChats(1);
@@ -1312,7 +1310,7 @@ function dispatchTick() {
     if (ready2.length) {
       const chat = ready2[0];
       chat.lastSent = Date.now();
-      S.sentToday++; S.t2Today++;
+      S.stats.sent_today++; S.stats.t2_today++;
       addLog('t2', chat.name, '✅ Відправлено', null);
       save(); renderChats(2);
     }
@@ -1333,8 +1331,8 @@ function addLog(type, chat, status, orders) {
   if (S.log.length > 200) S.log = S.log.slice(0,200);
   save();
   document.getElementById('log-count-badge').textContent = S.log.length + ' записів';
-  document.getElementById('log-t1-count').textContent = S.t1Today;
-  document.getElementById('log-t2-count').textContent = S.t2Today;
+  document.getElementById('log-t1-count').textContent = S.stats.t1_today;
+  document.getElementById('log-t2-count').textContent = S.stats.t2_today;
   if (document.getElementById('page-log').classList.contains('active')) renderLog(logFilter);
 }
 
@@ -1348,8 +1346,8 @@ function filterLog(f, el) {
 function renderLog(filter) {
   logFilter = filter;
   document.getElementById('log-count-badge').textContent = S.log.length + ' записів';
-  document.getElementById('log-t1-count').textContent = S.t1Today;
-  document.getElementById('log-t2-count').textContent = S.t2Today;
+  document.getElementById('log-t1-count').textContent = S.stats.t1_today;
+  document.getElementById('log-t2-count').textContent = S.stats.t2_today;
 
   let items = S.log;
   if (filter === 'sent') items = items.filter(l => l.status && l.status.includes('✅'));
