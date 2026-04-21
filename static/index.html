@@ -648,6 +648,14 @@ body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--t);max-
         <div class="fg s2"><label class="flabel">Назва чату</label><input class="fi" id="c-name" placeholder="Зерно Україна — Перевезення"></div>
         <div class="fg s2"><label class="flabel">Username або посилання</label><input class="fi" id="c-user" placeholder="@назва або t.me/..."></div>
         <div class="fg s2">
+          <label class="flabel">Тема (топік) — необов'язково</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select class="fi" id="c-topic" style="flex:1"><option value="">— Без теми (загальний чат) —</option></select>
+            <button class="btn-s g" onclick="loadTopics()" style="white-space:nowrap;padding:10px 12px">📋 Теми</button>
+          </div>
+          <div id="c-topic-status" style="font-size:11px;color:var(--t3);margin-top:4px"></div>
+        </div>
+        <div class="fg s2">
           <label class="flabel">Ліміт між повідомленнями</label>
           <select class="fi" id="c-limit">
             <option value="15">15 хвилин</option>
@@ -1142,9 +1150,33 @@ function openChatModal(type) {
   document.getElementById('c-name').value = '';
   document.getElementById('c-user').value = '';
   document.getElementById('c-limit').value = '30';
+  document.getElementById('c-topic').innerHTML = '<option value="">— Без теми (загальний чат) —</option>';
+  document.getElementById('c-topic-status').textContent = '';
   document.getElementById('chat-modal-title').textContent = type === 1 ? 'Додати чат — Перевізники' : 'Додати чат — Клієнти';
   document.getElementById('chat-save-btn').className = type===1 ? 'btn-big g' : 'btn-big b';
   openModal('modal-chat');
+}
+
+async function loadTopics() {
+  const user = document.getElementById('c-user').value.trim();
+  if (!user) { alert('Спочатку введи username або посилання чату'); return; }
+  const statusEl = document.getElementById('c-topic-status');
+  statusEl.textContent = '⏳ Завантажую теми...';
+  const r = await api('POST', '/api/tg/topics', { chat: user });
+  if (!r || !r.ok) {
+    statusEl.textContent = '❌ ' + (r ? r.error : 'Помилка');
+    return;
+  }
+  const sel = document.getElementById('c-topic');
+  sel.innerHTML = '<option value="">— Без теми (загальний чат) —</option>';
+  if (r.topics && r.topics.length) {
+    r.topics.forEach(t => {
+      sel.innerHTML += `<option value="${t.id}">${t.title}</option>`;
+    });
+    statusEl.textContent = `✅ Знайдено ${r.topics.length} тем`;
+  } else {
+    statusEl.textContent = r.message || 'Цей чат не має тем';
+  }
 }
 
 async function saveChat() {
@@ -1152,8 +1184,16 @@ async function saveChat() {
   const user = document.getElementById('c-user').value.trim();
   const limit = parseInt(document.getElementById('c-limit').value);
   const type = parseInt(document.getElementById('c-type').value);
+  const topicEl = document.getElementById('c-topic');
+  const topic_id = topicEl.value || null;
+  const topic_name = topicEl.value ? topicEl.options[topicEl.selectedIndex].text : '';
   if (!name && !user) { alert('Введи назву або username чату'); return; }
-  await api('POST', `/api/chats/${type}`, { name: name||user, user, limit, active: true, lastSent: null });
+  const chatData = { name: name||user, user, limit, active: true, lastSent: null };
+  if (topic_id) {
+    chatData.topic_id = topic_id;
+    chatData.topic_name = topic_name;
+  }
+  await api('POST', `/api/chats/${type}`, chatData);
   if (type===1) S.chats1 = await api('GET','/api/chats/1');
   else S.chats2 = await api('GET','/api/chats/2');
   closeModal('modal-chat'); renderChats(type);
@@ -1182,7 +1222,7 @@ function renderChats(type) {
       <div class="card-hdr">
         <div class="card-main">
           <div class="card-title">${c.name}</div>
-          <div class="card-sub">${c.user ? c.user+' · ' : ''}${nextIn(c)}</div>
+          <div class="card-sub">${c.user ? c.user+' · ' : ''}${c.topic_name ? '📌 '+c.topic_name+' · ' : ''}${nextIn(c)}</div>
           <div class="card-sub" style="margin-top:2px;font-size:11px">${timeAgo(c.lastSent)}</div>
         </div>
         <div class="tgl-wrap">
