@@ -3,8 +3,9 @@ import json
 import asyncio
 import threading
 import random
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -24,6 +25,12 @@ load_dotenv()
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = os.getenv('SECRET_KEY', 'cargo2026')
 CORS(app, origins='*')
+
+# Часовий пояс Україна
+UA_TZ = ZoneInfo('Europe/Kyiv')
+def now_ua():
+    """Поточний час в Україні"""
+    return datetime.now(UA_TZ)
 
 # ═══════════════════════════════════════
 # КОНФІГ
@@ -167,7 +174,7 @@ def db_get_orders():
     return result
 
 def db_add_order(order):
-    oid = int(datetime.now().timestamp() * 1000)
+    oid = int(now_ua().timestamp() * 1000)
     conn = get_conn()
     cur = conn.cursor()
     active = order.pop('active', True)
@@ -221,7 +228,7 @@ def db_get_ads():
     return result
 
 def db_add_ad(ad):
-    aid = int(datetime.now().timestamp() * 1000)
+    aid = int(now_ua().timestamp() * 1000)
     conn = get_conn()
     cur = conn.cursor()
     active = ad.pop('active', True)
@@ -275,7 +282,7 @@ def db_get_chats(chat_type):
     return result
 
 def db_add_chat(chat_type, chat):
-    cid = int(datetime.now().timestamp() * 1000)
+    cid = int(now_ua().timestamp() * 1000)
     conn = get_conn()
     cur = conn.cursor()
     active = chat.pop('active', True)
@@ -348,7 +355,7 @@ def db_get_stats():
     cur.close()
     conn.close()
     # Скидаємо якщо новий день
-    today_str = date.today().isoformat()
+    today_str = now_ua().date().isoformat()
     if result.get('last_date') != today_str:
         db_set_stat('sent_today', '0')
         db_set_stat('t1_today', '0')
@@ -388,7 +395,7 @@ def db_inc_stat(key):
     conn.close()
 
 def db_add_log(log_type, chat_name, status, orders=None):
-    now = datetime.now()
+    now = now_ua()
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -516,6 +523,30 @@ async def _get_dialogs():
             })
     return dialogs
 
+async def _get_topics(chat_identifier):
+    """Отримати список топіків (тем) в групі"""
+    from telethon.tl.functions.channels import GetForumTopicsRequest
+    entity = chat_identifier
+    try:
+        entity = int(chat_identifier)
+    except (ValueError, TypeError):
+        pass
+    target = await tg_client.get_entity(entity)
+    result = await tg_client(GetForumTopicsRequest(
+        channel=target,
+        offset_date=0,
+        offset_id=0,
+        offset_topic=0,
+        limit=100,
+    ))
+    topics = []
+    for t in result.topics:
+        topics.append({
+            'id': t.id,
+            'title': t.title,
+        })
+    return topics
+
 try:
     tg_run(_init_client())
 except Exception as e:
@@ -588,16 +619,19 @@ def build_t1_message(orders, contact):
     active = [o for o in orders if o.get('active') and o.get('status') == 'active']
     if not active:
         return None
-    return '\n\n——————————\n\n'.join(
+    # Антиспам: додаємо невидимий символ щоб кожне повідомлення було унікальним
+    invisible = '\u200b' * random.randint(1, 5)
+    msg = '\n\n——————————\n\n'.join(
         build_order_text(o, i + 1, contact) for i, o in enumerate(active)
     )
+    return msg + invisible
 
 def can_send(chat):
     last = chat.get('lastSent')
     if not last:
         return True
     limit_ms = chat.get('limit', 30) * 60 * 1000
-    now_ms = int(datetime.now().timestamp() * 1000)
+    now_ms = int(now_ua().timestamp() * 1000)
     return (now_ms - last) >= limit_ms
 
 async def _do_send(chat_identifier, text, topic_id=None):
@@ -651,7 +685,7 @@ def dispatch_tick():
                     t1_msg,
                     topic_id
                 ))
-                now_ms = int(datetime.now().timestamp() * 1000)
+                now_ms = int(now_ua().timestamp() * 1000)
                 db_update_chat(1, chat['id'], {'lastSent': now_ms})
                 if ok:
                     db_inc_stat('sent_today')
@@ -685,7 +719,7 @@ def dispatch_tick():
                         ad_text,
                         topic_id
                     ))
-                    now_ms = int(datetime.now().timestamp() * 1000)
+                    now_ms = int(now_ua().timestamp() * 1000)
                     db_update_chat(2, chat['id'], {'lastSent': now_ms})
                     if ok:
                         db_inc_stat('sent_today')
@@ -701,7 +735,7 @@ def check_auto_schedule():
     if dispatch['mode'] != 'auto':
         return
     settings = db_get_settings()
-    now_time = datetime.now().strftime('%H:%M')
+    now_time = now_ua().strftime('%H:%M')
     start = settings.get('start', '08:00')
     end   = settings.get('end',   '19:00')
     should_run = start <= now_time < end
@@ -968,6 +1002,22 @@ def api_tg_dialogs():
         return jsonify(dialogs)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+@app.route('/api/tg/topics', methods=['POST'])
+def api_tg_topics():
+    if not tg_connected:
+        return jsonify({'ok': False, 'error': 'Telegram не підключений'}), 400
+    chat_id = request.json.get('chat', '')
+    if not chat_id:
+        return jsonify({'ok': False, 'error': 'Вкажи username або ID чату'}), 400
+    try:
+        topics = tg_run(_get_topics(chat_id))
+        return jsonify({'ok': True, 'topics': topics})
+    except Exception as e:
+        err = str(e)
+        if 'CHANNEL_FORUM_MISSING' in err or 'not a forum' in err.lower():
+            return jsonify({'ok': True, 'topics': [], 'message': 'Цей чат не має тем (топіків)'})
+        return jsonify({'ok': False, 'error': err}), 400
 
 # ═══════════════════════════════════════
 # ЗАПУСК
