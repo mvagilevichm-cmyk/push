@@ -590,7 +590,7 @@ body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--t);max-
     </div>
     <div class="fsec">
       <div class="fsec-title">Текст рекламного повідомлення</div>
-      <textarea class="fta" id="ad-text" rows="8" placeholder="🚛 Маємо вільні зерновози&#10;📍 Готові до роботи по всій Україні&#10;📞 Телефонуйте: +380633885088 (Максим)&#10;&#10;Швидко, надійно, з документами!"></textarea>
+      <textarea class="fta" id="ad-text" rows="8" placeholder="🚨🚨🚨🚨🚨🚨&#10;🚛 ПЕРЕВЕЗЕННЯ ВАНТАЖІВ&#10;🚨🚨🚨🚨🚨🚨&#10;&#10;🏢 Транспортно-експедиційна компанія&#10;🌾 Перевезення агро та промислових вантажів&#10;&#10;✅ Вся Україна + міжнародні напрямки&#10;✅ Працюємо з ПДВ та ФОП&#10;📍 Географія: без обмежень&#10;⏱ Досвід: перевірена команда&#10;📋 Документи: повний супровід&#10;&#10;🏆 Надійність · Швидкість · Результат&#10;&#10;❇️❇️❇️❇️❇️❇️&#10;📞 +380633885088 (Максим)&#10;❇️❇️❇️❇️❇️❇️"></textarea>
     </div>
     <div class="slabel">Попередній перегляд</div>
     <div class="prev-box" id="ad-preview" style="font-size:12px">Введи текст вище…</div>
@@ -1067,31 +1067,39 @@ function buildOrderText(o, num) {
   if (!o.cargo && !o.fromCity && !o.toCity) return 'Заповни поля вище…';
   const from = [o.fromCity, o.fromVil].filter(Boolean).join(', ');
   const to = [o.toCity, o.toVil].filter(Boolean).join(', ');
-  const lines = [`🚛 ЗАЯВКА #${num}`];
-  if (from || to) lines.push(`📍 Маршрут: ${[from, to].filter(Boolean).join(' → ')}`);
-  if (o.dist) lines.push(`📏 Відстань: ${o.dist} км`);
-  if (o.cargo || o.weight) lines.push(`📦 Вантаж: ${[o.cargo, o.weight].filter(Boolean).join(' — ')}`);
-  if (o.trucks && o.trucks.length) lines.push(`🚛 Тип авто: ${o.trucks.join(', ')}`);
-  if (o.count && o.count !== '1') lines.push(`🔢 Кількість машин: ${o.count}`);
+  const lines = [];
+  lines.push('🚨🚨🚨🚨🚨🚨');
+  lines.push(`🚛  ЗАЯВКА #${num}`);
+  lines.push('🚨🚨🚨🚨🚨🚨');
+  const route = [from, to].filter(Boolean).join(' → ');
+  if (route && o.dist) lines.push(`📍 ${route} (${o.dist} км)`);
+  else if (route) lines.push(`📍 ${route}`);
+  else if (o.dist) lines.push(`📍 ${o.dist} км`);
+  if (o.cargo || o.weight) lines.push(`📦 ${[o.cargo, o.weight].filter(Boolean).join(' — ')}`);
+  const trucks = o.trucks && o.trucks.length ? o.trucks.join(', ') : '';
+  const count = o.count && o.count !== '1' ? o.count : '';
+  if (trucks && count) lines.push(`🚚 ${trucks} · ${count} маш.`);
+  else if (trucks) lines.push(`🚚 ${trucks}`);
+  else if (count) lines.push(`🚚 ${count} маш.`);
   if (o.tariff === 'ask') {
-    lines.push('💰 Ціна: запит (перевізник називає свою ціну)');
+    lines.push('💰 Ціна за запитом');
   } else if (o.pdv || o.fop) {
     const p = [];
-    if (o.pdv) p.push(`${o.pdv} грн (ПДВ)`);
-    if (o.fop) p.push(`${o.fop} грн (ФОП)`);
-    lines.push(`💰 Ціна: ${p.join(' / ')}`);
+    if (o.pdv) p.push(`ПДВ ${o.pdv}`);
+    if (o.fop) p.push(`ФОП ${o.fop}`);
+    lines.push(`💰 ${p.join(' / ')} грн`);
   }
-  if (o.date1 || o.date2) lines.push(`📅 Дати: ${[fmtDate(o.date1), fmtDate(o.date2)].filter(Boolean).join(' — ')}`);
-  if (o.note) lines.push(`📝 Примітка: ${o.note}`);
+  if (o.date1 || o.date2) lines.push(`📅 ${[fmtDate(o.date1), fmtDate(o.date2)].filter(Boolean).join(' — ')}`);
+  if (o.note) lines.push(`📝 ${o.note}`);
   const contact = buildContact(getSettings());
-  if (contact) lines.push(`📞 Контакт: ${contact}`);
+  if (contact) lines.push(`📞 ${contact}`);
   return lines.join('\n');
 }
 
 function buildFullT1Message() {
   const active = S.orders.filter(o => o.active && o.status === 'active');
   if (!active.length) return null;
-  return active.map((o, i) => buildOrderText(o, i+1)).join('\n\n——————————\n\n');
+  return active.map((o, i) => buildOrderText(o, i+1)).join('\n\n❇️❇️❇️❇️❇️❇️\n\n');
 }
 
 function updateOrderPreview() {
