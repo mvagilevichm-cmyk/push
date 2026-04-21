@@ -590,7 +590,7 @@ body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--t);max-
     </div>
     <div class="fsec">
       <div class="fsec-title">Текст рекламного повідомлення</div>
-      <textarea class="fta" id="ad-text" rows="8" placeholder="🚨🚨🚨🚨🚨🚨&#10;🚛 ПЕРЕВЕЗЕННЯ ВАНТАЖІВ&#10;🚨🚨🚨🚨🚨🚨&#10;&#10;🏢 Транспортно-експедиційна компанія&#10;🌾 Перевезення агро та промислових вантажів&#10;&#10;✅ Вся Україна + міжнародні напрямки&#10;✅ Працюємо з ПДВ та ФОП&#10;📍 Географія: без обмежень&#10;⏱ Досвід: перевірена команда&#10;📋 Документи: повний супровід&#10;&#10;🏆 Надійність · Швидкість · Результат&#10;&#10;❇️❇️❇️❇️❇️❇️&#10;📞 +380633885088 (Максим)&#10;❇️❇️❇️❇️❇️❇️"></textarea>
+      <textarea class="fta" id="ad-text" rows="8" placeholder="🚨🚨🚨🚨🚨🚨🚨🚨&#10;🚛 ПЕРЕВЕЗЕННЯ ВАНТАЖІВ&#10;🚨🚨🚨🚨🚨🚨🚨🚨&#10;&#10;🏢 Транспортно-експедиційна компанія&#10;🌾 Перевезення агро та промислових вантажів&#10;&#10;✅ Вся Україна + міжнародні напрямки&#10;✅ Працюємо з ПДВ та ФОП&#10;📍 Географія: без обмежень&#10;⏱️ Досвід: перевірена команда&#10;📋 Документи: повний супровід&#10;&#10;🏆 Надійність · Швидкість · Результат&#10;&#10;❇️❇️❇️❇️❇️❇️❇️❇️&#10;📞 +380633885088 (Максим)&#10;❇️❇️❇️❇️❇️❇️❇️❇️"></textarea>
     </div>
     <div class="slabel">Попередній перегляд</div>
     <div class="prev-box" id="ad-preview" style="font-size:12px">Введи текст вище…</div>
@@ -1068,9 +1068,9 @@ function buildOrderText(o, num) {
   const from = [o.fromCity, o.fromVil].filter(Boolean).join(', ');
   const to = [o.toCity, o.toVil].filter(Boolean).join(', ');
   const lines = [];
-  lines.push('🚨🚨🚨🚨🚨🚨');
+  lines.push('🚨🚨🚨🚨🚨🚨🚨🚨');
   lines.push(`🚛  ЗАЯВКА #${num}`);
-  lines.push('🚨🚨🚨🚨🚨🚨');
+  lines.push('🚨🚨🚨🚨🚨🚨🚨🚨');
   const route = [from, to].filter(Boolean).join(' → ');
   if (route && o.dist) lines.push(`📍 ${route} (${o.dist} км)`);
   else if (route) lines.push(`📍 ${route}`);
@@ -1099,7 +1099,7 @@ function buildOrderText(o, num) {
 function buildFullT1Message() {
   const active = S.orders.filter(o => o.active && o.status === 'active');
   if (!active.length) return null;
-  return active.map((o, i) => buildOrderText(o, i+1)).join('\n\n❇️❇️❇️❇️❇️❇️\n\n');
+  return active.map((o, i) => buildOrderText(o, i+1)).join('\n\n❇️❇️❇️❇️❇️❇️❇️❇️\n\n');
 }
 
 function updateOrderPreview() {
@@ -1237,8 +1237,11 @@ async function delAd(id) {
 // ═══════════════════════════════════════
 let chatModalType = 1;
 
-function openChatModal(type) {
+let editChatId = null;
+
+function openChatModal(type, editId = null) {
   chatModalType = type;
+  editChatId = editId;
   document.getElementById('c-type').value = type;
   document.getElementById('c-name').value = '';
   document.getElementById('c-user').value = '';
@@ -1251,8 +1254,47 @@ function openChatModal(type) {
   document.getElementById('c-slowmode-status').textContent = '';
   document.getElementById('custom-limit-wrap').classList.remove('show');
   document.getElementById('custom-limit-hint').style.display = 'none';
-  document.getElementById('chat-modal-title').textContent = type === 1 ? 'Додати чат — Перевізники' : 'Додати чат — Клієнти';
-  document.getElementById('chat-save-btn').className = type===1 ? 'btn-big g' : 'btn-big b';
+
+  if (editId !== null) {
+    const arr = type === 1 ? S.chats1 : S.chats2;
+    const c = arr.find(x => x.id === editId);
+    if (c) {
+      document.getElementById('c-name').value = c.name || '';
+      document.getElementById('c-user').value = c.user || '';
+      document.getElementById('c-slowmode').value = c.slowmode || 0;
+      if (c.slowmode && c.slowmode > 0) {
+        document.getElementById('c-slowmode-display').textContent = '⚠️ ' + formatSlowmode(c.slowmode);
+        document.getElementById('c-slowmode-display').style.color = 'var(--a)';
+      }
+      // Встановлюємо ліміт
+      const sel = document.getElementById('c-limit');
+      let found = false;
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value !== 'custom' && parseInt(sel.options[i].value) === c.limit) {
+          sel.value = sel.options[i].value;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        sel.value = 'custom';
+        onLimitChange();
+        document.getElementById('c-limit-custom-h').value = Math.floor(c.limit / 60);
+        document.getElementById('c-limit-custom-m').value = c.limit % 60;
+      }
+      // Топік
+      if (c.topic_id) {
+        const topicSel = document.getElementById('c-topic');
+        topicSel.innerHTML += `<option value="${c.topic_id}" selected>${c.topic_name || 'Тема #' + c.topic_id}</option>`;
+      }
+    }
+    document.getElementById('chat-modal-title').textContent = type === 1 ? 'Редагувати чат — Перевізники' : 'Редагувати чат — Клієнти';
+    document.getElementById('chat-save-btn').textContent = '✓ Зберегти зміни';
+  } else {
+    document.getElementById('chat-modal-title').textContent = type === 1 ? 'Додати чат — Перевізники' : 'Додати чат — Клієнти';
+    document.getElementById('chat-save-btn').textContent = '✓ Додати чат';
+  }
+  document.getElementById('chat-save-btn').className = type === 1 ? 'btn-big g' : 'btn-big b';
   openModal('modal-chat');
 }
 
@@ -1288,20 +1330,27 @@ async function saveChat() {
   const topic_name = topicEl.value ? topicEl.options[topicEl.selectedIndex].text : '';
   const slowmode = parseInt(document.getElementById('c-slowmode').value) || 0;
   if (!name && !user) { alert('Введи назву або username чату'); return; }
-  // Перевіряємо що ліміт не менше slowmode
   const smMin = Math.ceil(slowmode / 60);
   if (slowmode > 0 && limit < smMin) {
     alert(`Ліміт (${limit} хв) менше за slowmode чату (${smMin} хв). Збільш ліміт.`);
     return;
   }
-  const chatData = { name: name||user, user, limit, slowmode, active: true, lastSent: null };
-  if (topic_id) {
-    chatData.topic_id = topic_id;
-    chatData.topic_name = topic_name;
+  if (editChatId !== null) {
+    const updateData = { name: name||user, user, limit, slowmode };
+    updateData.topic_id = topic_id;
+    updateData.topic_name = topic_name;
+    await api('PUT', `/api/chats/${type}/${editChatId}`, updateData);
+  } else {
+    const chatData = { name: name||user, user, limit, slowmode, active: true, lastSent: null };
+    if (topic_id) {
+      chatData.topic_id = topic_id;
+      chatData.topic_name = topic_name;
+    }
+    await api('POST', `/api/chats/${type}`, chatData);
   }
-  await api('POST', `/api/chats/${type}`, chatData);
   if (type===1) S.chats1 = await api('GET','/api/chats/1');
   else S.chats2 = await api('GET','/api/chats/2');
+  editChatId = null;
   closeModal('modal-chat'); renderChats(type);
 }
 
@@ -1343,6 +1392,7 @@ function renderChats(type) {
         </div>
       </div>
       <div class="cact">
+        <button class="btn-s ${type===1?'g':'b'}" onclick="openChatModal(${type},${c.id})">✏️ Ред.</button>
         <button class="btn-s r" onclick="delChat(${type},${c.id})">🗑 Видалити</button>
       </div>
     </div>`;
